@@ -8,32 +8,40 @@ library(dismo)			### Library dismo will be needed for the sensitivity analysis u
 ### n.year: number of consecutive years simulated 
 
 metapop.model<-function(n.sim, dim.sq, n.year){
+	
 	### Load the required libraries: fields for the pairwise euclidean distance and lhs for the latin hypercube sampling
+	### igraph for networks
+	
 	require(fields)
 	require(lhs)
-  require(igraph)
+  	require(igraph)
   
   #### structure for holding the results
 	outsim <- vector("list") 
+	
 	### Latin hypercube sampling of some parameters
-  lh <- randomLHS(n.sim, 4)									### Generate values
+  	lh <- randomLHS(n.sim, 4)									### Generate values
 	input <- matrix(0, nrow=n.sim, ncol=4)
 	colnames(input) <- c("Number of patches", "Alpha", "c", "z")
 	
 	### Actual parameters values
-	input[,1] <- round(qunif(lh[,1], min=5, max=20), digits=0)				### Number of patches (it is possible to change this)
-	##########
-	input[,2] <- qunif(lh[,2], min=100, max=900)    					        ### Density per squared metre (alpha); from estimates in a report by Warburton et al. (2009).
-	######## I converted these units to density per squared kilometer. Double check this. (Miguel)
-	input[,3] <- qunif(lh[,3], min=1/5, max=1/1)					            ### Exponential distance decay dispersal kernel in metres (from 1 to 5 km); based on estimates from Etherington et al. (2014): http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0088293
-	input[,4] <- round(qunif(lh[,4], min=0.1, max=1), digits=2)				### Power law exponent (for the abundance-area relationship)
+	input[,1] <- round(qunif(lh[,1], min=5, max=100), digits=0)	### Number of patches; PGD: I've increased it to 100 patches maximum
+	
+	input[,2] <- qunif(lh[,2], min=0, max=900)			### Density per km2 (alpha); from estimates in a report by Warburton et al. (2009).
+	######## I converted these units to density per squared kilometer. Double check this (PGD: I've included zero, so some patches can be vacant)
+	
+	input[,3] <- qunif(lh[,3], min=1/5, max=1/1)		### Exponential distance decay dispersal kernel in metres (from 1 to 5 km); based on estimates from Etherington et al. (2014): http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0088293
+	input[,4] <- round(qunif(lh[,4], min=0.1, max=1), digits=2)		### Power law exponent (for the abundance-area relationship)
 			
-	for (s in 1:n.sim){			### Start simulations
-    pars <- vector("list") 									### Create empty list to store results
-    A <- pars$Area <- round(runif(input[s,1], min=25, max=10000), digits=0)			### Patch area varies from 25sqm to 100000sqm (10ha)
-		r <- runif(input[s,1], min=.1, max=3)							### Per capita population growth rate (due to births and death, but not because of migration - migration is modelled directly in raw numbers)
+	### Start simulations
+	
+	for (s in 1:n.sim){			
+    	pars <- vector("list") 					### Create empty list to store results
 		
-		##### I have increased the max r to 3 to allow for richer dynamics in the logistic equation
+    	A <- pars$Area <- round(runif(input[s,1], min=0.01, max=1), digits=2)	### Patch area in km2 (varies from 1 to 100 ha)
+	r <- runif(input[s,1], min=.1, max=3)					### Per capita population growth rate (due to births and death, but not because of migration - migration is modelled directly in raw numbers)
+		
+		##### I have increased the max r to 3 to allow for richer dynamics in the logistic equation; PGD: yeah, good. 
 
 		### Create the patch centroids and calculate the distance matrix
 		x.sim <- sample(dim.sq, input[s,1])					### Simulate x-coordinates for the centroids using sample without replacement	
@@ -44,29 +52,31 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 
 		##### Initial population size and k (carrying capacity) for each patch
 
-		N <- matrix(0, ncol=input[s,1], nrow=n.year)				### Create empty matrix to store results
-		N[1,] <- round(input[s,2]*A^input[s,4], digits=0)				### Define initial population size based on the power-law relationship
+		N <- matrix(0, ncol=input[s,1], nrow=n.year)			### Create empty matrix to store abundance results
+		N[1,] <- round(input[s,2]*A^input[s,4], digits=0)		### Define initial population size based on the power-law relationship
 		
 		##########
 		k <- round(runif(input[s,1], min=min(N[1,]), max=max(N[1,])),digits=0)		### Define patch-level k as the inital population size plus a random number of additional animals
-		##########  I have changed the way k is defined.... double check this! (Miguel)
+		##########  I have changed the way k is defined.... double check this! (Miguel); PGD: yeah, good
 
-		#### Exponential distance-decay dispersal kernel (normalised to represent a true probability, given that animals move on any direction)
-		dk <- exp(-input[s,3]*D)*(input[s,3]^2/2*pi)
+		#### Exponential distance-decay dispersal kernel
+		dk <- exp(-input[s,3]*D)
 		
 		#### we normalise dk so the probabilities of moving sum up to one (to make sure all immigrants are distributed)
+		### PGD: we don't need to normalise the dispersal kernel twice - I've removed the spatial normalisation in the previous line :)
 		dk <- (dk/rowSums(dk,na.rm=T))
 		
-		### Probability of dipsersal in each patch
-    prob.disp <- round(runif(input[s,1], min=0.01, max=0.2), digits=2)	### Annual probability of dispersal (adult possums are recorded up to a maximum of 0.2); based on estimates from Ramsey & Efford (2010): http://onlinelibrary.wiley.com/doi/10.1111/j.1365-2664.2010.01839.x/abstract
+		### Individual probability of dispersal in each patch
+    		prob.disp <- round(runif(input[s,1], min=0.01, max=0.2), digits=2)	### Annual probability of dispersal (adult possums are recorded up to a maximum of 0.2); based on estimates from Ramsey & Efford (2010): http://onlinelibrary.wiley.com/doi/10.1111/j.1365-2664.2010.01839.x/abstract
 		### If according to Ramsey et al, the maximum dispersal probability should be 0.2, why do you use 0.7 as the max?
-    ### Changed according to the comment above
+  		### Changed according to the comment above; PGD: yeah, fine. 
     
 		### Create an array to store the results of the movement patterns (a matrix each year)
 		movement <- array(0, dim=c(nrow=input[s,1], ncol=input[s,1], n.year))
 		
 		#### Simulate the dynamics
 		#### Here start the simulations
+		
 		for (i in 2:n.year){        ### n.year: number of years simulated
 		  
 		  ##### here we calculate dispersers for each local population and store the results in the
@@ -87,7 +97,8 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 		  N[i,][N[i,]< 0] <- 0
 	
     }
-
+		### PGD: Can we take the graphs out of the function? For me, it is easier to visualise and work with them
+		
 		matplot(N,type='l', lty=1, lwd=2, col=rainbow(14), main='Local pops dynamics', xlab='Time', ylab='Abundance')
 		plot(rowSums(N), main='Metapop dynamics', xlab='Time', ylab='Abundance', type='l', lwd=2)
   
@@ -118,6 +129,7 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 		##### maybe a better measure for the sensitivity analyses would be some sort of 
 		##### weighted mean abundance? (weighted by the area) - so it is more than just 
 		##### persistent and non-persistent
+		### PGD: we need to change all of this below to adapt it to the updated model; just to reflect what are we doing :)
 		
 		n.patches <- as.numeric(input[s,1])
   	#pars$N<-N						### Matrix with population size per year in each patch
@@ -145,7 +157,7 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 ############ SIMULATIONS
 ### Number of simulations and sensitivity analysis parameters based on Prowse et al. (2016): http://onlinelibrary.wiley.com/doi/10.1002/ecs2.1238/full 
 
-n.sims <- 10					#### Number of simulations: 20000
+n.sims <- 10					#### Number of simulations: 20000; PGD: it is currently 10 so it is easy to see if the code works
 dimensions <- seq(0, 10, 0.01)		#### Dimensions of the landscape (in kilometres because this is the unit used by the dispersal kernel),total area =10000ha
 years <- 13*3						#### Number of years simulated, representing three generations; maximum lifespan of a possum in the wild = 13 years 
 
@@ -155,14 +167,14 @@ sim.patch <- metapop.model(n.sim=n.sims, dim.sq=dimensions,  n.year=years)
 
 # sim.patch
 
-### Store the simulation data in a more manageable format (data frame)
+### Store the simulation data in a more manageable format (data frame); PGD: the output simulation have to have the same length for this to work
 
 out.sim <- do.call(rbind, lapply(sim.patch, data.frame, stringsAsFactors=FALSE))
 
 
 ################################ SENSITIVITY ANALYSIS OF THE PROBABILITY OF PERSISTENCE USING DISMO
 
-### Create a data frame storing the data
+### Create a data frame storing the data; PGD: need to revise these things once we decide what to do :)
 
 data.sens<-data.frame(pers=out.sim$pers, Area=out.sim$Area, dist.nearest=out.sim$min.dist, connectivity=out.sim$conn, n0=out.sim$init, prop.k=out.sim$prop.k, n.patch=out.sim$n.patch, 
 			alpha=out.sim$alpha, c=out.sim$c, z=out.sim$z, prob.disp=out.sim$prob.disp, prop.sink=out.sim$n.sink, prop.source=out.sim$n.source)
