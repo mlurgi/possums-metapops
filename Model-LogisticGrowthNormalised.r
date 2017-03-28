@@ -25,12 +25,12 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 	colnames(input) <- c("Number of patches", "Alpha", "c", "z")
 	
 	### Actual parameters values
-	input[,1] <- round(qunif(lh[,1], min=5, max=100), digits=0)	### Number of patches; PGD: I've increased it to 100 patches maximum
+	input[,1] <- qpois(lh[,1], lambda=10)			### Number of patches; PGD: I've changed this to a Poisson distribution with a mean of 10 patches
 	
-	input[,2] <- qunif(lh[,2], min=0, max=900)			### Density per km2 (alpha); from estimates in a report by Warburton et al. (2009).
+	input[,2] <- round(qunif(lh[,2], min=0, max=900), digits=2)	### Density per km2 (alpha); from estimates in a report by Warburton et al. (2009).
 	######## I converted these units to density per squared kilometer. Double check this (PGD: I've included zero, so some patches can be vacant)
 	
-	input[,3] <- qunif(lh[,3], min=1/5, max=1/1)		### Exponential distance decay dispersal kernel in metres (from 1 to 5 km); based on estimates from Etherington et al. (2014): http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0088293
+	input[,3] <- round(qunif(lh[,3], min=1/5, max=1/1), digits=2)		### Exponential distance decay dispersal kernel in metres (from 1 to 5 km); based on estimates from Etherington et al. (2014): http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0088293
 	input[,4] <- round(qunif(lh[,4], min=0.1, max=1), digits=2)		### Power law exponent (for the abundance-area relationship)
 			
 	### Start simulations
@@ -131,24 +131,24 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 		##### persistent and non-persistent
 		### PGD: we need to change all of this below to adapt it to the updated model; just to reflect what are we doing :)
 		
-		n.patches <- as.numeric(input[s,1])
-  	#pars$N<-N						### Matrix with population size per year in each patch
-  	# pars$N<-sum(N[n.year,])				### Total number of individuals remaining in the landscape at the end year
+	n.patches <- as.numeric(input[s,1])			### Number of patches
+  	pars$N<-N						### Matrix with population size per year in each patch
+  	pars$N.end<-N[n.year,]					### Population size in each patch at the last year
   	pars$init<-N[1,]					### Initial population size in each patch
-  	pars$pers<-ifelse(N[n.year,]>=1, 1, 0)				### Persistence in each patch by the end of the simulated time
-  	pars$min.dist<-apply(D, 1, function(x){min(x, na.rm=T)})		### Distance to the nearest neighbour patch (in metres)
-  	pars$conn<-apply(dk, 2, function(x){sum(x, na.rm=T)})			### Connectivty measured as the sum of the dispersal kernel
-  	pars$prop.k<-1-((k-N[1,])/k)						### Proportion of k represented by the initial pop. size in each patch
-  	pars$n.patch<-rep(n.patches, n.patches)				### Total number of patches in the landscape (repeat the same value for each patch)
-  	pars$alpha<-rep(input[s,2], n.patches)					### Density, alpha (repeat the same value for each patch)
-  	pars$c<-rep(input[s,3], n.patches)					#### Exponential distance decay dispersal kernel in metres (repeat the same value for each patch)
-  	pars$z<-rep(input[s,4], n.patches)					#### power law exponent (repeat the same value for each patch)
-  	pars$prob.disp<-prob.disp						#### Annual probability of dispersal
-
-  	#pars$movement<-movement
-  	pars$n.sink<-rep(sum(r<0)/n.patches, n.patches)
-  	pars$n.source<-rep(sum(r>0)/n.patches, n.patches)
-  	outsim[[s]]<-pars
+  	
+	### PGD: I've made changes to the parameters to output, so I just changed the whole batch of code (I'm too lazy)
+		
+  	pars$k<-k						### Patch carrying capacity
+	pars$alpha<-rep(input[s,2], n.patches)			### Density, alpha (repeat the same value for each patch)
+	pars$c<-rep(input[s,3], n.patches)			### Exponential distance decay dispersal kernel in metres (repeat the same value for each patch)
+	pars$z<-rep(input[s,4], n.patches)			### power law exponent (repeat the same value for each patch)
+	pars$prob.disp<-prob.disp				### Annual probability of dispersalfor each patch
+	pars$min.dist<-apply(D, 1, function(x){min(x, na.rm=T)})		### Distance to the nearest neighbour patch (in metres)
+	pars$conn<-degree(g)					### Connectivty measured as the number of neighbours; PGD: check this one Miguel
+	pars$r<-r						### Per capita growth rate in each patch
+	pars$prop.hab<-rep(sum(A)/(max(dim.sq)^2), input[s,1])		### Proportion of the landscape that is 'good' habitat
+  	
+		outsim[[s]]<-pars
   }
   outsim
 }
@@ -157,27 +157,32 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 ############ SIMULATIONS
 ### Number of simulations and sensitivity analysis parameters based on Prowse et al. (2016): http://onlinelibrary.wiley.com/doi/10.1002/ecs2.1238/full 
 
-n.sims <- 10					#### Number of simulations: 20000; PGD: it is currently 10 so it is easy to see if the code works
+n.sims <- 10				#### Number of simulations: 20000; PGD: it is currently 10 so it is easy to see if the code works
 dimensions <- seq(0, 10, 0.01)		#### Dimensions of the landscape (in kilometres because this is the unit used by the dispersal kernel),total area =10000ha
-years <- 13*3						#### Number of years simulated, representing three generations; maximum lifespan of a possum in the wild = 13 years 
+years <- 13*3				#### Number of years simulated, representing three generations; maximum lifespan of a possum in the wild = 13 years 
 
 ##### RUN THE SIMULATIONS
 
 sim.patch <- metapop.model(n.sim=n.sims, dim.sq=dimensions,  n.year=years)
 
-# sim.patch
+# sim.patch  ### Delete the hastag to examine the list containing the results :)
 
 ### Store the simulation data in a more manageable format (data frame); PGD: the output simulation have to have the same length for this to work
 
 out.sim <- do.call(rbind, lapply(sim.patch, data.frame, stringsAsFactors=FALSE))
 
+##################################################### PGD: I've changed this to a sensitivity analysis of the abundance in the last simulated year
+############################################# Not quite sure it makes any sense, and it probably better to analyse something else. For example,
+############################################# if you run the sa, you'll find that k is the most important factor. Of course it is!
+#################################### I've just copied the new thing (too lazy, again), but we may need to think about it. 
 
-################################ SENSITIVITY ANALYSIS OF THE PROBABILITY OF PERSISTENCE USING DISMO
+################################ SENSITIVITY ANALYSIS OF THE ABUNDANCE IN THE LAST YEAR
+library(dismo)
 
-### Create a data frame storing the data; PGD: need to revise these things once we decide what to do :)
+### Create a data frame storing the data
 
-data.sens<-data.frame(pers=out.sim$pers, Area=out.sim$Area, dist.nearest=out.sim$min.dist, connectivity=out.sim$conn, n0=out.sim$init, prop.k=out.sim$prop.k, n.patch=out.sim$n.patch, 
-			alpha=out.sim$alpha, c=out.sim$c, z=out.sim$z, prob.disp=out.sim$prob.disp, prop.sink=out.sim$n.sink, prop.source=out.sim$n.source)
+data.sens<-data.frame(N=out.sim$N, Area=out.sim$Area, dist.nearest=out.sim$min.dist, connectivity=out.sim$conn, n0=out.sim$init, k=out.sim$k, 
+			alpha=out.sim$alpha, c=out.sim$c, z=out.sim$z, prob.disp=out.sim$prob.disp, r=out.sim$r, prop.hab=out.sim$prop.hab)
 
 ### Extract only complete cases - excluding those that produced NAs (because these simulations were exploring a restricted parameter space)
 
@@ -186,16 +191,10 @@ data.sens<-data.sens[complete.cases(data.sens),]
 
 ### Fit a boosted regression tree (takes 1 hour in my laptop)
 
-sens<-gbm.step(data.sens, gbm.x=2:13, gbm.y=1, tree.complexity=3,learning.rate=0.001, bag.fraction=0.7, step.size=1000, max.trees=4000,  n.folds=3, family="bernoulli")
+sens<-gbm.step(data.sens, gbm.x=2:12, gbm.y=1, tree.complexity=3,learning.rate=0.001, bag.fraction=0.7, step.size=1000, max.trees=4000,  n.folds=3, family="poisson")
 
 ### Examine the results and variable importance
 summary(sens)
-
-
-### Computation time
-proc.time()[3]/60
-
-
 
 
 
