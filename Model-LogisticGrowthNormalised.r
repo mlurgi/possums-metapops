@@ -140,10 +140,10 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 		
   	pars$k<-k						### Patch carrying capacity
 	pars$alpha<-rep(input[s,2], n.patches)			### Density, alpha (repeat the same value for each patch)
-	pars$c<-rep(input[s,3], n.patches)			### Exponential distance decay dispersal kernel in metres (repeat the same value for each patch)
+	pars$c<-rep(input[s,3], n.patches)			### Exponential distance decay dispersal kernel (repeat the same value for each patch)
 	pars$z<-rep(input[s,4], n.patches)			### power law exponent (repeat the same value for each patch)
 	pars$prob.disp<-prob.disp				### Annual probability of dispersalfor each patch
-	pars$min.dist<-apply(D, 1, function(x){min(x, na.rm=T)})		### Distance to the nearest neighbour patch (in metres)
+	pars$min.dist<-apply(D, 1, function(x){min(x, na.rm=T)})		### Distance to the nearest neighbour patch (in km)
 	pars$conn<-degree(g)					### Connectivty measured as the number of neighbours; PGD: check this one Miguel
 	pars$r<-r						### Per capita growth rate in each patch
 	pars$prop.hab<-rep(sum(A)/(max(dim.sq)^2), input[s,1])		### Proportion of the landscape that is 'good' habitat
