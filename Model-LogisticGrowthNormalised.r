@@ -25,7 +25,7 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 	colnames(input) <- c("Number of patches", "Alpha", "c", "z")
 	
 	### Actual parameters values
-	input[,1] <- round(qunif(lh[,1], min=1, max=100), digits=0)	### Number of patches; PGD: I've increased it to 100 patches maximum
+	input[,1] <- round(qunif(lh[,1], min=2, max=100), digits=0)	### Number of patches; PGD: I've increased it to 100 patches maximum
 	
 	input[,2] <- round(qunif(lh[,2], min=0, max=900), digits=2)	### Density per km2 (alpha); from estimates in a report by Warburton et al. (2009).
 	######## I converted these units to density per squared kilometer. Double check this (PGD: I've included zero, so some patches can be vacant)
