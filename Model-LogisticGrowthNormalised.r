@@ -25,7 +25,7 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 	colnames(input) <- c("Number of patches", "Alpha", "c", "z")
 	
 	### Actual parameters values
-	input[,1] <- qpois(lh[,1], lambda=10)			### Number of patches; PGD: I've changed this to a Poisson distribution with a mean of 10 patches
+	input[,1] <- round(qunif(lh[,1], min=1, max=100), digits=0)	### Number of patches; PGD: I've increased it to 100 patches maximum
 	
 	input[,2] <- round(qunif(lh[,2], min=0, max=900), digits=2)	### Density per km2 (alpha); from estimates in a report by Warburton et al. (2009).
 	######## I converted these units to density per squared kilometer. Double check this (PGD: I've included zero, so some patches can be vacant)
@@ -38,7 +38,7 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 	for (s in 1:n.sim){			
     	pars <- vector("list") 					### Create empty list to store results
 		
-    	A <- pars$Area <- round(runif(input[s,1], min=0.01, max=1), digits=2)	### Patch area in km2 (varies from 1 to 100 ha)
+    	A <- pars$Area<- round(runif(input[s,1], 0.01, 1), digits=2)		### PGD: Patch area in hectares drawn from a Negative Binomial distribution and transformed into km2 (not fully convinced of this)
 	r <- runif(input[s,1], min=.1, max=3)					### Per capita population growth rate (due to births and death, but not because of migration - migration is modelled directly in raw numbers)
 		
 		##### I have increased the max r to 3 to allow for richer dynamics in the logistic equation; PGD: yeah, good. 
