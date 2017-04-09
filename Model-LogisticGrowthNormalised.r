@@ -172,7 +172,7 @@ metapop.model<-function(n.sim, dim.sq, n.year){
 
 
 #this function incorporates allee effects to the model
-metapop.nallee <- function(n.sim, dim.sq, n.year, cat.year){
+metapop.nallee <- function(n.sim, dim.sq, n.year, cat.year, with.allee=F){
   ### Load the required libraries: fields for the pairwise euclidean distance and lhs for the latin hypercube sampling
   require(fields)
   require(lhs)
@@ -208,7 +208,10 @@ metapop.nallee <- function(n.sim, dim.sq, n.year, cat.year){
     
     ##### Initial population size and k (carrying capacity) for each patch
     N <- matrix(0, ncol=input[s,1], nrow=n.year)					### Create empty matrix to store results
-    N[1,] <- k <- round(input[s,2]*A^input[s,4], digits=1)				### Define initial population size based on the power-law relationship; initialise the local population at k
+    N[1,] <- k <- round(input[s,2]*A^input[s,4], digits=0)				### Define initial population size based on the power-law relationship; initialise the local population at k
+    
+    ### for the allee effect
+    if(with.allee) allee <- round((k*.1))
     
     #### Exponential distance-decay dispersal kernel 
     dk <- exp(-input[s,3]*D)
@@ -248,7 +251,8 @@ metapop.nallee <- function(n.sim, dim.sq, n.year, cat.year){
       # N[i,][N[i,]< 0] <- 0
       
       #### ML: If dispersal has to be after growth, I would do it like this:
-      N[i,] <- N[i-1, ] + round( ((r[i,] * (N[(i-1),] ) ) * ((k - (N[(i-1),] ))/k)), digits=0) - emigrants + immigrants
+      if(with.allee) N[i,] <- N[i-1, ] + round( ((r[i,] * (N[(i-1),])) * ((k - (N[(i-1),] ))/k) * ((N[(i-1),]/allee) - 1 )), digits=0) - emigrants + immigrants
+      else N[i,] <- N[i-1, ] + round( ((r[i,] * (N[(i-1),] ) ) * ((k - (N[(i-1),] ))/k) ), digits=0) - emigrants + immigrants
       N[i,][N[i,]< 0] <- 0
       
       
@@ -337,7 +341,7 @@ cat.years <- 10
 
 # sim.patch <- metapop.model(n.sim=n.sims, dim.sq=dimensions,  n.year=years)
 
-sim.patch <- metapop.nallee(n.sims, dimensions, years, cat.years)
+sim.patch <- metapop.nallee(n.sims, dimensions, years, cat.years, T)
 # sim.patch  ### Delete the hastag to examine the list containing the results :)
 
 ### Store the simulation data in a more manageable format (data frame); PGD: the output simulation have to have the same length for this to work
