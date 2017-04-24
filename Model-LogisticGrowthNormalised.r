@@ -1,3 +1,223 @@
+########## PG-D HERE'S THE NEW VERSION AS OF 24/04/2017 ###############
+##################### MODEL 11/04/2017 ################
+#this function incorporates allee effects to the model
+metapop.model <- function(n.sim, dim.sq, n.year, with.allee=F, cat.year, thres.dens){
+  ### Load the required libraries: fields for the pairwise euclidean distance and lhs for the latin hypercube sampling
+  require(fields)
+  require(igraph)
+  require(qgraph)
+  require(msm)
+  require(gtools)
+  
+  #### structure for holding the results
+  outsim <- vector("list") 
+  for (s in 1:n.sim){			### Start simulations
+    pars <- vector("list") 														### Create empty list to store results
+	
+	
+	### Simulated parameter values
+	
+	### Landscape
+	
+	prop.hab<-round(runif(1, 0.1, 0.6), digits=2)					#### Proportion of the landscape that is suitable habitat
+	area.hab<-prop.hab*(max(dim.sq)^2)									#### Area (km2) that is suitable habitat
+
+	init.patches <- round(rtnorm(1, mean=20, sd=10, lower=5, upper=50), digits=0)		### Initial number of patches drawn from a truncated normal distribution (rounding a normal dist approximates a Poisson dist)
+
+	prop.habpatch<-as.vector(rdirichlet(1, rep(1, init.patches) ))					### Proportion of the suitable habitat in the landscape attibuted to each of initial patches, drawn from a Dirichlet distribution
+	
+	patch.area<-round(prop.habpatch*area.hab, digits=2)							### Area (km2) of each patch		
+	patch.area<-patch.area[patch.area!=0]										### Exclude patches with an area of 0	
+	
+	n.patches<-length(patch.area)									### Final number of patches in the landscape (number of initial patches minus those with zero area)
+	
+	density<- rpois(1, lambda=500)  								### Density per km2 (alpha); mean density = 500/km2. From estimates in a report by Warburton et al. (2009r
+	c <- runif(1, min=1/10, max=1/1)					        ### Exponential distance decay dispersal kernel in metres (from 10 to 1 km); based on estimates from Etherington et al. (2014): http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0088293
+	z <- runif(1, min=0.1, max=1)							### Power law exponent (for the abundance-area relationship)
+	cat.mag<-round(rbeta(n.patches, 1, 1), digits=2)							### Magnitude of the catastrophe (proportion remaing after catastrophe) - flat probability from 0 to 1
+    
+    ### Create patch centroids and calculate the distance matrix
+    x.sim <- sample(dim.sq, n.patches)						### Simulate x-coordinates for the centroids using sample without replacement	
+    y.sim <- sample(dim.sq, n.patches)						### Simulate y-coordinates for the centroids using sample without replacement	
+    coord.patches <- matrix(c(x.sim, y.sim), nrow=n.patches, ncol=2)		### Put together the patch centroids
+    D <- rdist(coord.patches)							### Pairwise euclidean distance matrix calculated using function rdist from package fields
+    
+    ##### Initial population size and k (carrying capacity) for each patch
+    N <- matrix(0, ncol=n.patches, nrow=n.year)					### Create empty matrix to store results
+    N[1,] <- k <- rpois(n.patches, density*patch.area^z)				### Define initial population size based on the power-law relationship; initialise the local population at k
+    
+    ### for the allee effect
+    if(with.allee) allee <--(round(density*0.2*patch.area, digits=0))					### This is an example value that seems to work (we can try other things :) 
+    
+    #### Exponential distance-decay dispersal kernel 
+    dk <- exp(-c*D)
+  	diag(dk) <- 0
+	
+    #### I was talking with Dean and a good way of normalising things so they sum up to 1 is to use a Multinomial distribution
+	  #### That's what I've done below within the 'year' loop
+	
+    ### Probability of dipsersal in each patch
+    prob.disp <- round(rbeta(n.patches, 2, 5), digits=2)					### Annual probability of dispersal using a Beta distribution with a peak density around ~0.2
+    
+    ### Create an array to store the results of the movement patterns (a matrix each year)
+    movement <- array(0, dim=c(nrow=n.patches, ncol=n.patches, n.year))
+    r <- runif(n.patches, min=0.1, max=3)					### Per capita population growth rate (due to births and death, but not because of migration - migration is modelled directly in raw numbers)
+    
+    #### Simulate the dynamics
+    #### Here start the simulations for each + 1 year
+    for (i in 2:n.year){        ### n.year: number of years simulated
+  	  #### PGD-: If the dispersal is after growth, I think that we need to calculate the growth first and the dispersal based on that. I've changed the allee effects formulat to the one in the post
+  	  #### which is the same as model (4) in Table 1 of the paper (it shows interesting dynamics - figures 1b and 1c in paper).
+  	  #### Also, I've removed some brackets - it may be because I'm crazy and seeing many brackets makes me nervous
+  	 
+      if(with.allee) growth <- rpois(n.patches, N[i-1, ] + round((r * N[(i-1),])* (1-(N[(i-1),]/k))*((N[(i-1),]/k)-(allee/k))))
+	    else growth <- rpois(n.patches, N[i-1, ] +  round(((r * N[(i-1),]  ) * ((k - N[(i-1),] )/k) )))
+      
+	    growth[is.na(growth)] <- 0
+      ### Movement after growth. Here we calculate dispersers for each local population and store the results in the
+      ### movement matrix
+	    ### Emigrants per year drawn from a Binomial distribution
+      
+		  emigrants <- rbinom(n.patches, size=growth, prob=prob.disp)
+		
+	    ### Estimate the movement matrix (total number of current dispersers) drawn from a multinomial distribution (so the probabilities sum up to 1 row-wise and there is no need to normalise)
+	    ### I'm kind of certain that there has to be an easier way of doing this without using a loop, but I couldn't figure it out. Sleep and caffeine deprivation?
+	  
+	    for (j in 1:n.patches){
+	      movement[j,,i] <- rmultinom(1, size=emigrants[j], prob=dk[j,])
+      }
+	  
+      emigrants <- rowSums(movement[,,i], na.rm=T)
+      immigrants <- colSums(movement[,,i], na.rm=T)
+      
+     # print('current pop')
+      #print(N[i-1,])
+      #print('emigrants')
+      #print(emigrants)
+      #print('immigrants')
+      #print(immigrants)
+      
+      #### Now the population size with growth and dispersal. ML: If dispersal has to be after growth, I would do it like this. PGD: You're the expert! I'm happy wit that
+      if(with.allee) N[i,] <-  rpois(n.patches, growth - emigrants + immigrants)
+      else N[i,] <- rpois(n.patches, growth - emigrants + immigrants)
+      N[i,][N[i,]< 0] <- 0
+      
+      if(i == cat.year){
+        N[i, ] <- rbinom(n.patches, N[i-1, ], prob=cat.mag)
+		N[i,][N[i,]< 0] <- 0
+	    }
+	
+    } 
+    # Define the network of connections between patches observed from the random process is to set a threshold 
+    # this is equivalent to say that no connection is assumed 
+    # between patches for which the probability to arrive from 
+    # one to the other is smaller than the threshold
+	  #### PG-D: Changed this again to km (see email)
+	conn_thrs <- 1/c
+    adj_m <- D
+    adj_m[adj_m < conn_thrs] <- 0
+    adj_m[is.na(adj_m)] <- 0
+    adj_m[adj_m > conn_thrs] <- 1
+    
+    ### this is how the network of patches looks like
+    g <- graph_from_adjacency_matrix(adj_m, mode='undirected')
+    
+    #### so we can se results a little bit...
+    matplot(N, type='l', lwd=2)
+    
+	#plot(g)
+	
+    ### time until recovering to a threshold density of interest
+    t.recov <- rep(0, n.patches)
+	  for (j in 1:n.patches){
+      t.recov[j] <- which(N[(cat.year+1):n.year,j]/patch.area[j] >= thres.dens*100)[1]					
+	  }
+
+    ### OUTPUT VALUES- classified by groups
+	pars$Simulation<-as.numeric(c(1:n.sims)[s])
+	
+    pars$t.recov <- t.recov									### Time to recovery
+	
+    ### Landscape-level parameters
+    pars$n.patches <- n.patches											### Number of patches
+	pars$tot.conn <- ecount(g)/((vcount(g)*(vcount(g)-1))/2)			### Connectance
+	pars$tot.conn[is.na(pars$tot.conn)] <- 0
+	pars$lp <- ecount(g)/vcount(g)										### Mean number of links per patch in the landscape
+	pars$lp[is.na(pars$lp)] <- 0
+	pars$prop.hab <- rep(prop.hab,  n.patches)			### Proportion of the landscape that is 'good' habitat
+	
+	### Patch-level parameters (Miguel - add centrality here, please :)
+	pars$Area<-patch.area													### Patch area, in km
+	pars$min.dist<-apply(D, 1, function(x){sort(x, decreasing=TRUE)[2]})		### Distance to the nearest neighbour patch (in km), discarding the first one that's going to be itself
+	pars$patch.conn<-degree(g)										### Patch connectivty measured as the number of neighbours
+	pars$patch.conn[is.na(pars$patch.conn)] <- 0
+	pars$k<-k														### Patch carrying capacity
+	pars$norm_between <- betweenness(g)/degree(g)					### Normalised centrality
+	pars$norm_between[is.na(pars$norm_between)] <- 0
+	pars$r<-r														### Per capita growth rate
+ 	  
+	### Species-level parameters
+	pars$c<-rep(c, n.patches)								### Exponential distance decay dispersal kernel in metres (repeat the same value for each patch)
+    pars$prob.disp<-prob.disp										### Annual probability of dispersal
+    pars$alpha<-rep(density, n.patches)							### Density, alpha (repeat the same value for each patch)
+    pars$z<-rep(z, n.patches)								### power law exponent (repeat the same value for each patch)
+
+	### Catastrophe magnitude (patch-level)
+	pars$mag<-1-cat.mag												### Magnitude of the catastrophe
+	  
+	#pars$N<-N
+    #pars$g<-g
+	
+  	outsim[[s]]<-pars
+	
+	}
+  outsim
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 set.seed(10)
