@@ -8,8 +8,7 @@ metapop.model <- function(n.sim, dim.sq, n.year, with.allee=F, cat.year, thres.d
   require(qgraph)
   require(msm)
   require(gtools)
-	
-	### Change
+
   
   #### structure for holding the results
   outsim <- vector("list") 
