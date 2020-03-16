@@ -10,6 +10,7 @@ metapop.model <- function(n.sim, dim.sq, n.year, with.allee=F, cat.year, thres.d
   require(gtools)
 
 	###### Change something!!!!
+	 change.som(1)
   
   #### structure for holding the results
   outsim <- vector("list") 
